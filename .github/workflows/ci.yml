@@ -16,6 +16,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan Git history for secrets
+        run: |
+          docker run --rm \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/repo,readonly \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --redact --log-opts="--all"
 
       - name: Set up Python
         uses: actions/setup-python@v5
