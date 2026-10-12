@@ -12,6 +12,7 @@ permissions:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -154,6 +155,7 @@ jobs:
           if docker container inspect cloudops-ci >/dev/null 2>&1; then
             docker rm -f cloudops-ci
           fi
+
           if docker volume inspect ci-ticket-data >/dev/null 2>&1; then
             docker volume rm ci-ticket-data
-          fi     --ignore-unfixed --exit-code 1
+          fi
