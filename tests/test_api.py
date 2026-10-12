@@ -61,3 +61,10 @@ def test_unknown_ticket(client):
 def test_reject_invalid_json_body(client):
     response = client.post("/tickets", json=["invalid"])
     assert response.status_code == 400
+
+
+def test_home_page(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert b"CloudOps Desk" in response.data
+    assert b'id="ticket-form"' in response.data

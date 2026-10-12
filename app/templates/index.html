@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloudOps Desk</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 850px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f4f6fa;
+      color: #172033;
+    }
+    form, article {
+      background: white;
+      padding: 20px;
+      margin-bottom: 16px;
+      border-radius: 10px;
+    }
+    label { display: block; margin-bottom: 6px; }
+    input, textarea {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 16px;
+    }
+    button {
+      background: #2457d6;
+      color: white;
+      border: 0;
+      padding: 12px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #message { min-height: 24px; }
+  </style>
+</head>
+<body>
+  <h1>Travis-Ops Desk</h1>
+  <p>Create and track your support tickets.</p>
+
+  <form id="ticket-form">
+    <label for="title">Title</label>
+    <input id="title" required maxlength="200">
+
+    <label for="description">Description</label>
+    <textarea id="description" rows="4"></textarea>
+
+    <button id="submit-button" type="submit">Create ticket</button>
+  </form>
+
+  <p id="message" role="status"></p>
+  <h2>Tickets</h2>
+  <div id="tickets"></div>
+
+  <script>
+    const form = document.getElementById("ticket-form");
+    const message = document.getElementById("message");
+    const ticketList = document.getElementById("tickets");
+    const submitButton = document.getElementById("submit-button");
+
+    async function loadTickets() {
+      const response = await fetch("/tickets");
+      if (!response.ok) {
+        throw new Error("Could not load tickets.");
+      }
+
+      const tickets = await response.json();
+      ticketList.replaceChildren();
+
+      if (tickets.length === 0) {
+        ticketList.textContent = "No tickets yet.";
+        return;
+      }
+
+      for (const ticket of tickets) {
+        const article = document.createElement("article");
+        const heading = document.createElement("h3");
+        const description = document.createElement("p");
+        const status = document.createElement("p");
+
+        heading.textContent = `#${ticket.id} — ${ticket.title}`;
+        description.textContent = ticket.description;
+        status.textContent = `Status: ${ticket.status}`;
+
+        article.append(heading, description, status);
+        ticketList.append(article);
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      submitButton.disabled = true;
+      message.textContent = "Saving...";
+
+      try {
+        const response = await fetch("/tickets", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            title: document.getElementById("title").value,
+            description: document.getElementById("description").value
+          })
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Could not create ticket.");
+        }
+
+        form.reset();
+        message.textContent = "Ticket saved.";
+        await loadTickets();
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        submitButton.disabled = false;
+      }
+    });
+
+    loadTickets().catch((error) => {
+      message.textContent = error.message;
+    });
+  </script>
+</body>
+</html>

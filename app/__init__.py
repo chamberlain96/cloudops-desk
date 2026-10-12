@@ -1,7 +1,7 @@
 import os
 
 import click
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 
 from .models import db, Ticket
 
@@ -21,6 +21,9 @@ def create_app(test_config=None):
     def init_db():
         db.create_all()
         click.echo("Database initialized.")
+    @app.get("/")
+    def home():
+        return render_template("index.html")
 
     @app.get("/health")
     def health():
