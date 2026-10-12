@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
+RUN python -m pip uninstall -y pip
 RUN groupadd --gid 10001 appuser \
     && useradd --uid 10001 --gid appuser --no-create-home appuser \
     && mkdir -p /app/instance \
