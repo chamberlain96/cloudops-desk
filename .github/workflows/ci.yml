@@ -35,3 +35,38 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t cloudops-desk:${{ github.sha }} .
+
+      - name: Export image for scanning
+        run: |
+          mkdir -p /tmp/cloudops-scan
+          docker save cloudops-desk:${{ github.sha }} \
+            -o /tmp/cloudops-scan/image.tar
+
+      - name: Generate full vulnerability report
+        run: |
+          docker run --rm \
+            --mount type=bind,source=/tmp/cloudops-scan,target=/scan \
+            --mount source=trivy-cache,target=/root/.cache/trivy \
+            aquasec/trivy:0.75.0 \
+            image --input /scan/image.tar \
+            --scanners vuln --format json \
+            --output /scan/trivy-report.json
+
+      - name: Save vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ github.sha }}
+          path: /tmp/cloudops-scan/trivy-report.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Block fixable HIGH and CRITICAL vulnerabilities
+        run: |
+          docker run --rm \
+            --mount type=bind,source=/tmp/cloudops-scan,target=/scan,readonly \
+            --mount source=trivy-cache,target=/root/.cache/trivy \
+            aquasec/trivy:0.75.0 \
+            image --input /scan/image.tar \
+            --scanners vuln --severity HIGH,CRITICAL \
+            --ignore-unfixed --exit-code 1
