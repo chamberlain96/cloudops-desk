@@ -12,6 +12,7 @@ permissions:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -79,3 +80,82 @@ jobs:
             image --input /scan/image.tar \
             --scanners vuln --severity HIGH,CRITICAL \
             --ignore-unfixed --exit-code 1
+
+      - name: Start container for smoke test
+        run: |
+          docker volume create ci-ticket-data
+
+          docker run --rm \
+            --mount source=ci-ticket-data,target=/app/instance \
+            cloudops-desk:${{ github.sha }} \
+            python -m flask --app app:create_app init-db
+
+          docker run -d \
+            --name cloudops-ci \
+            -p 127.0.0.1:5002:5000 \
+            --mount source=ci-ticket-data,target=/app/instance \
+            cloudops-desk:${{ github.sha }}
+
+      - name: Verify container health and ticket storage
+        run: |
+          python - <<'PY'
+          import json
+          import time
+          from urllib.error import URLError
+          from urllib.request import Request, urlopen
+
+          base = "http://127.0.0.1:5002"
+
+          for attempt in range(30):
+              try:
+                  with urlopen(base + "/health", timeout=2) as response:
+                      assert response.status == 200
+                      assert json.load(response)["status"] == "ok"
+                  break
+              except (URLError, OSError):
+                  time.sleep(1)
+          else:
+              raise SystemExit("Container did not become ready")
+
+          request = Request(
+              base + "/tickets",
+              data=json.dumps({
+                  "title": "CI smoke test",
+                  "description": "Verify the built container"
+              }).encode(),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          with urlopen(request, timeout=5) as response:
+              assert response.status == 201
+              ticket = json.load(response)
+
+          with urlopen(
+              base + f"/tickets/{ticket['id']}", timeout=5
+          ) as response:
+              assert response.status == 200
+              saved = json.load(response)
+              assert saved["title"] == "CI smoke test"
+              assert saved["status"] == "open"
+
+          print("PASS: container starts, saves, and retrieves tickets")
+          PY
+
+      - name: Show container logs
+        if: always()
+        run: |
+          if docker container inspect cloudops-ci >/dev/null 2>&1; then
+            docker logs cloudops-ci
+          fi
+
+      - name: Clean up smoke test
+        if: always()
+        run: |
+          if docker container inspect cloudops-ci >/dev/null 2>&1; then
+            docker rm -f cloudops-ci
+          fi
+
+          if docker volume inspect ci-ticket-data >/dev/null 2>&1; then
+            docker volume rm ci-ticket-data
+          fi
