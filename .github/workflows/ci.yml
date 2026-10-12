@@ -37,6 +37,9 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install -r requirements-security.txt
 
+      - name: Audit Python dependencies
+        run: python -m pip_audit -r requirements.txt --strict
+
       - name: Run automated tests
         run: python -m pytest -q
 
