@@ -184,3 +184,113 @@ with Ansible.
 
 Before provisioning, review connectivity, IAM permissions,
 expected costs, state management, and cleanup.
+
+---
+
+# Milestone 2 — AWS Network and Terraform State
+
+Date: October 13, 2026
+
+## Goal
+
+Build a reusable AWS network with Terraform, protect its state,
+and add infrastructure checks to CI.
+
+## State storage
+
+Bucket: cloudops-desk-tfstate-eb2bb881
+
+Configuration:
+- Versioning enabled.
+- AES256 server-side encryption.
+- Public access blocked.
+- Accidental Terraform destruction protected.
+
+State keys:
+- Bootstrap: bootstrap/terraform.tfstate
+- Development: environments/dev/terraform.tfstate
+
+Bootstrap state was migrated from local storage to S3.
+Both backends enable native S3 locking with use_lockfile = true.
+
+State files and saved plans are excluded from Git.
+Provider lock files are committed.
+
+## Network architecture
+
+Region: us-east-1
+VPC: 10.20.0.0/16
+
+| Subnet | CIDR | Placement |
+|--------|------|-----------|
+| Public 1 | 10.20.1.0/24 | First selected AZ |
+| Public 2 | 10.20.2.0/24 | Second selected AZ |
+| Private 1 | 10.20.11.0/24 | First selected AZ |
+| Private 2 | 10.20.12.0/24 | Second selected AZ |
+
+Terraform defines:
+- One VPC.
+- One internet gateway.
+- Four subnets.
+- Two custom route tables.
+- One internet route.
+- Four subnet associations.
+
+Public subnets route 0.0.0.0/0 through the internet gateway.
+Private subnets currently have only VPC-local routing.
+Automatic public-IP assignment is disabled in all four subnets.
+
+No NAT gateway, EC2 instance, load balancer, RDS database,
+or EKS cluster was included in this stage.
+
+## Terraform structure
+
+- infra/bootstrap/: State bucket setup.
+- infra/modules/network/: Reusable network module.
+- infra/environments/dev/: Development configuration.
+
+Module outputs expose VPC, subnet, and route-table IDs.
+
+## Verification
+
+Expected successful network apply:
+13 added, 0 changed, 0 destroyed.
+
+After deployment, run:
+
+    terraform -chdir=infra/bootstrap plan
+    terraform -chdir=infra/environments/dev plan
+
+Expected:
+No changes. Your infrastructure matches the configuration.
+
+Inspect AWS subnets and route tables to confirm the CIDRs,
+two-zone placement, and public/private routing.
+
+## CI and Git protection
+
+A separate Terraform workflow checks:
+- Formatting.
+- Bootstrap configuration validation.
+- Development configuration validation.
+
+CI initialization uses -backend=false and read-only provider
+lock files. It does not need AWS credentials or change resources.
+
+Required checks for main:
+- test-and-build
+- terraform-checks
+
+Terraform planning and deployment still run locally.
+OIDC-based automation is future work.
+
+## Limitations and next steps
+
+- The application is not deployed to AWS yet.
+- Private workload internet access is not configured.
+- Workload security groups and VPC flow logs are future work.
+- S3 storage, requests, and retained versions can incur charges.
+- Keep the state bucket while Terraform manages infrastructure.
+
+Next: Review the EC2 deployment architecture, permissions, costs,
+and cleanup; provision with Terraform and configure with Ansible.
