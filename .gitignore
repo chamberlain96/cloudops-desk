@@ -7,3 +7,24 @@ __pycache__/
 htmlcov/
 
 instance/
+
+# Terraform working directories
+**/.terraform/*
+
+# Local state and backups
+*.tfstate
+*.tfstate.*
+
+# Saved plans
+*.tfplan
+
+# Local variable values
+*.tfvars
+*.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Keep example variable files
+!*.tfvars.example
