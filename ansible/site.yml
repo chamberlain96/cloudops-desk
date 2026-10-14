@@ -1,0 +1,13 @@
+---
+- name: Prepare CloudOps Desk server
+  hosts: cloudops
+  become: true
+
+  pre_tasks:
+    - name: Wait for initial cloud setup to finish
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      when: not ansible_check_mode
+
+  roles:
+    - docker_host

@@ -1,0 +1,12 @@
+---
+- name: Configure Docker host
+  ansible.builtin.import_playbook: site.yml
+
+- name: Prepare application image
+  ansible.builtin.import_playbook: prepare-image.yml
+
+- name: Prepare application database
+  ansible.builtin.import_playbook: init-database.yml
+
+- name: Start and verify application
+  ansible.builtin.import_playbook: deploy.yml

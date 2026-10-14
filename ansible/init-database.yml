@@ -1,0 +1,49 @@
+---
+- name: Prepare CloudOps Desk database
+  hosts: cloudops
+  become: true
+
+  vars:
+    cloudops_image: "cloudops-desk:2de810457c08"
+
+  tasks:
+    - name: Ensure database volume exists
+      community.docker.docker_volume:
+        name: cloudops-ticket-data
+        state: present
+
+    - name: Check whether database file exists
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --mount
+          - source=cloudops-ticket-data,target=/app/instance
+          - --entrypoint
+          - python
+          - "{{ cloudops_image }}"
+          - -c
+          - "from pathlib import Path; raise SystemExit(0 if Path('/app/instance/tickets.db').is_file() else 1)"
+      register: database_check
+      changed_when: false
+      failed_when: database_check.rc not in [0, 1]
+
+    - name: Initialize database when file is missing
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --mount
+          - source=cloudops-ticket-data,target=/app/instance
+          - --entrypoint
+          - python
+          - "{{ cloudops_image }}"
+          - -m
+          - flask
+          - --app
+          - app:create_app
+          - init-db
+      when: database_check.rc == 1
+      changed_when: true
