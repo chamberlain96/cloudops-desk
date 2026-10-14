@@ -28,3 +28,6 @@ crash.*.log
 
 # Keep example variable files
 !*.tfvars.example
+
+# Local Ansible inventory
+ansible/inventory/dev.ini
