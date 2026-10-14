@@ -1,0 +1,56 @@
+---
+- name: Manage CloudOps Desk application
+  hosts: cloudops
+  become: true
+
+  vars:
+    cloudops_image: "cloudops-desk:2de810457c08"
+
+  tasks:
+    - name: Install Python dependency for Docker modules
+      ansible.builtin.apt:
+        name: python3-requests
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 300
+
+    - name: Check deployment image exists
+      community.docker.docker_image_info:
+        name: "{{ cloudops_image }}"
+      register: image_info
+
+    - name: Require the image to be loaded
+      ansible.builtin.assert:
+        that:
+          - image_info.images | length > 0
+        fail_msg: "Load the deployment image on EC2 before continuing."
+
+    - name: Ensure database volume exists
+      community.docker.docker_volume:
+        name: cloudops-ticket-data
+        state: present
+
+    - name: Ensure application container is running
+      community.docker.docker_container:
+        name: cloudops-desk
+        image: "{{ cloudops_image }}"
+        pull: never
+        state: started
+        restart_policy: unless-stopped
+        published_ports:
+          - "0.0.0.0:5000:5000"
+        volumes:
+          - "cloudops-ticket-data:/app/instance"
+
+    - name: Wait for application health endpoint
+      ansible.builtin.uri:
+        url: http://127.0.0.1:5000/health
+        status_code: 200
+        return_content: true
+      register: health
+      until: >
+        health.status | default(0) == 200 and
+        (health.json | default({})).get('status') == 'ok'
+      retries: 30
+      delay: 2

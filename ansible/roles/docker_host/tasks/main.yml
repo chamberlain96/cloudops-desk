@@ -1,0 +1,25 @@
+---
+- name: Install Docker and supporting packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - ca-certificates
+      - curl
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+
+- name: Start Docker and enable it at boot
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Create application directory
+  ansible.builtin.file:
+    path: /opt/cloudops-desk
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"

@@ -294,3 +294,50 @@ OIDC-based automation is future work.
 
 Next: Review the EC2 deployment architecture, permissions, costs,
 and cleanup; provision with Terraform and configure with Ansible.
+
+## Milestone 3 — Terraform EC2 and Ansible deployment
+
+### Goal
+Deploy CloudOps Desk to AWS using Terraform for infrastructure and Ansible for server configuration and application deployment.
+
+### Infrastructure
+- Reused the Terraform VPC and a public subnet.
+- Provisioned an Ubuntu EC2 instance with an encrypted root volume.
+- Restricted SSH and application access to my public IP.
+- Required IMDSv2.
+- Attached an instance role with the managed Systems Manager policy.
+- Used the existing S3 remote state backend with locking.
+
+### Deployment
+- Installed and enabled Docker through an Ansible role.
+- Transferred a Docker image archive from WSL to EC2.
+- Loaded the image only when the archive changed or the image was missing.
+- Stored the SQLite database in a named Docker volume.
+- Initialized the database only when its file was missing.
+- Managed the application container with community.docker.
+- Combined configuration, image preparation, database initialization, and deployment in ansible/release.yml.
+- Added a health check with retries.
+
+### Verification
+- The application loaded on EC2 and saved tickets.
+- Tickets remained after restarting the container.
+- Repeated Ansible runs reported changed=0 and failed=0.
+- Added GitHub Actions syntax validation for the release playbook.
+
+### Troubleshooting
+The first image-loading attempt failed because the archive was missing on EC2. I built and exported the image locally, copied the archive to the server, and then loaded it successfully.
+
+### Current limitations
+- Image building and release execution are initiated from WSL.
+- The application uses HTTP with access restricted to my IP.
+- SQLite data survives container replacement, but is not protected against instance termination.
+- Database initialization checks file existence; schema migrations are not implemented.
+- Health checks confirm the application responds, not database readiness.
+- Attaching the Systems Manager policy alone does not verify SSM connectivity.
+- CI blocks fixable HIGH and CRITICAL image vulnerabilities; unresolved findings remain in the full report.
+
+### Cost control
+Stop the EC2 instance between sessions. EBS storage and S3 charges can continue while it is stopped. Its public IP can change when restarted, requiring an inventory update.
+
+### Interview explanation
+“I provisioned an AWS server with Terraform and automated Docker application deployment with Ansible. I verified repeatable deployments and container restart persistence, added CI validation, and documented security, recovery, and cost limitations.”

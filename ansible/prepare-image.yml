@@ -1,0 +1,52 @@
+---
+- name: Prepare CloudOps Desk image on EC2
+  hosts: cloudops
+  become: true
+
+  vars:
+    cloudops_image: "cloudops-desk:2de810457c08"
+    cloudops_archive: "/tmp/cloudops-desk-deploy.tar"
+
+  tasks:
+    - name: Ensure deployment directory exists
+      ansible.builtin.file:
+        path: /opt/cloudops-desk
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy image archive from WSL to EC2
+      ansible.builtin.copy:
+        src: "{{ cloudops_archive }}"
+        dest: /opt/cloudops-desk/image.tar
+        owner: root
+        group: root
+        mode: "0600"
+      register: image_archive
+
+    - name: Check whether the image is already loaded
+      community.docker.docker_image_info:
+        name: "{{ cloudops_image }}"
+      register: image_info
+
+    - name: Load image when archive changed or image is missing
+      ansible.builtin.command:
+        argv:
+          - docker
+          - load
+          - --input
+          - /opt/cloudops-desk/image.tar
+      when: image_archive.changed or image_info.images | length == 0
+      changed_when: true
+
+    - name: Verify the expected image is available
+      community.docker.docker_image_info:
+        name: "{{ cloudops_image }}"
+      register: loaded_image
+
+    - name: Require the expected image
+      ansible.builtin.assert:
+        that:
+          - loaded_image.images | length > 0
+        fail_msg: "The archive does not contain the expected image tag."

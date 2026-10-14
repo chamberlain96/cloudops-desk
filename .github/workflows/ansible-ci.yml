@@ -1,0 +1,37 @@
+name: Ansible Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ansible-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Ansible
+        run: python -m pip install ansible-core==2.20.1
+
+      - name: Install required collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Check deployment playbook syntax
+        run: |
+          ansible-playbook \
+            -i ansible/inventory/ci.ini \
+            ansible/release.yml \
+            --syntax-check
