@@ -1,0 +1,38 @@
+---
+- name: Prepare application image from ECR
+  hosts: cloudops
+  become: true
+
+  tasks:
+    - name: Require an image pinned by digest
+      ansible.builtin.assert:
+        that:
+          - cloudops_image is defined
+          - cloudops_image is match('^595540521786\.dkr\.ecr\.us-east-1\.amazonaws\.com/cloudops-desk@sha256:[a-f0-9]{64}$')
+        fail_msg: "Provide the CloudOps Desk ECR image URI with its digest."
+
+    - name: Get temporary ECR login token using instance role
+      ansible.builtin.command:
+        argv:
+          - /snap/bin/aws
+          - ecr
+          - get-login-password
+          - --region
+          - us-east-1
+      register: ecr_token
+      changed_when: false
+      no_log: true
+
+    - name: Authenticate Docker to ECR
+      community.docker.docker_login:
+        registry_url: 595540521786.dkr.ecr.us-east-1.amazonaws.com
+        username: AWS
+        password: "{{ ecr_token.stdout }}"
+        reauthorize: true
+      no_log: true
+
+    - name: Pull the selected image if missing
+      community.docker.docker_image:
+        name: "{{ cloudops_image }}"
+        source: pull
+        state: present

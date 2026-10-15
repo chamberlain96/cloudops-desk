@@ -3,8 +3,6 @@
   hosts: cloudops
   become: true
 
-  vars:
-    cloudops_image: "cloudops-desk:2de810457c08"
 
   tasks:
     - name: Install Python dependency for Docker modules
