@@ -2,8 +2,8 @@
 - name: Configure Docker host
   ansible.builtin.import_playbook: site.yml
 
-- name: Prepare application image
-  ansible.builtin.import_playbook: prepare-image.yml
+- name: Prepare application image from ECR
+  ansible.builtin.import_playbook: prepare-ecr.yml
 
 - name: Prepare application database
   ansible.builtin.import_playbook: init-database.yml

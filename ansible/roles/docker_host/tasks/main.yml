@@ -23,3 +23,12 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Install AWS CLI through Snap
+  ansible.builtin.command:
+    argv:
+      - snap
+      - install
+      - aws-cli
+      - --classic
+    creates: /snap/bin/aws

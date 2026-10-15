@@ -341,3 +341,43 @@ Stop the EC2 instance between sessions. EBS storage and S3 charges can continue 
 
 ### Interview explanation
 “I provisioned an AWS server with Terraform and automated Docker application deployment with Ansible. I verified repeatable deployments and container restart persistence, added CI validation, and documented security, recovery, and cost limitations.”
+
+## Milestone 4 — ECR publishing with OIDC and EC2 deployment
+
+### Goal
+Publish tested Docker images from GitHub Actions to Amazon ECR and deploy them to EC2 without copying image archives or storing AWS access keys.
+
+### Implementation
+- Created an encrypted ECR repository with immutable tags and scan-on-push.
+- Configured GitHub OIDC and a publishing role restricted to this repository's main branch.
+- Published the tested image using its Git commit SHA as the tag.
+- Granted the EC2 instance role pull permissions scoped to the application repository.
+- Installed AWS CLI through Ansible using the official Snap package.
+- Added an ECR preparation playbook that hides authentication details from logs.
+- Updated release.yml to pull and deploy an image selected by its exact digest.
+- Removed the archive preparation playbook and old hardcoded image defaults.
+
+### Verification
+- GitHub Actions authenticated through OIDC and published images to ECR.
+- EC2 obtained AWS credentials through its instance role.
+- EC2 pulled an image by digest.
+- The release playbook completed successfully.
+- Existing tickets remained after deployment.
+- The combined playbook passed its syntax check.
+
+### Troubleshooting
+- Terraform proposed replacing the stopped EC2 instance because public IP association was read as false. Starting the existing instance and regenerating the plan cleared the replacement.
+- GitHub authentication initially failed because the trust policy used the legacy subject format. Updating it to include the repository and owner IDs resolved the mismatch.
+- SSH required verification of the host key at the new public IP. I retrieved the fingerprint through Session Manager and confirmed it matched.
+- AWS CLI was missing on EC2, so I added its installation to the Ansible role.
+
+### Current limitations
+- GitHub Actions publishes images, but release execution still starts from WSL.
+- The release command requires cloudops_image to be supplied explicitly.
+- ECR authentication uses a temporary credential stored in root's Docker configuration.
+- The AWS CLI Snap package updates automatically rather than pinning a minor version.
+- The application still uses HTTP and SQLite without an instance-loss backup.
+- Database migrations and automated rollback are not implemented.
+
+### Interview explanation
+“I built a pipeline that tests and scans a Docker image, authenticates to AWS through OIDC, and publishes it to ECR. EC2 uses a separate IAM role with repository-scoped pull permissions, and Ansible deploys the selected image by digest while preserving the database volume.”
