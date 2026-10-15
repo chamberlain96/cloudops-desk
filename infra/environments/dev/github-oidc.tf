@@ -17,7 +17,7 @@ resource "aws_iam_role" "github_ecr_publish" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:chamberlain96/cloudops-desk:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub" = "repo:chamberlain96@115433860/cloudops-desk@1415997066:ref:refs/heads/main"
         }
       }
     }]
