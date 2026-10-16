@@ -381,3 +381,36 @@ Publish tested Docker images from GitHub Actions to Amazon ECR and deploy them t
 
 ### Interview explanation
 “I built a pipeline that tests and scans a Docker image, authenticates to AWS through OIDC, and publishes it to ECR. EC2 uses a separate IAM role with repository-scoped pull permissions, and Ansible deploys the selected image by digest while preserving the database volume.”
+
+## Milestone 5 — SSM release execution and application rollback
+
+### Implementation
+- Added Ansible block/rescue logic to remember the current image, deploy a selected image, verify health, and restore the previous image after failure.
+- Kept a recovered release marked as failed so CI reports the release outcome correctly.
+- Installed an isolated Ansible runtime and the Docker collection on EC2.
+- Added a local inventory so EC2 can run Ansible against itself without SSH.
+- Installed application release playbooks on EC2 through install-release.yml.
+- Created the Terraform-managed CloudOpsDesk-Release SSM document.
+- Restricted the document input to this ECR repository and an exact image digest.
+- Added a host-side release lock.
+- Created a separate GitHub OIDC deployment role scoped to the release document and application instance.
+- Added a manual GitHub deployment workflow with input validation, ECR verification, concurrency control, and SSM result reporting.
+
+### Validation
+- A normal Ansible release passed.
+- An intentional verification failure entered the recovery path.
+- A deliberately broken local image was used for a rollback test.
+- The dedicated SSM document successfully executed local Ansible on EC2.
+- The first GitHub-triggered release remains to be verified after merging.
+
+### Troubleshooting
+- The Ubuntu-packaged WSL AWS CLI failed with "badly formed help string" for SSM send-command. A separate AWS bundled CLI installation successfully submitted the command.
+- The initial collection check failed because its installation directory did not exist. Added directory creation before checking collections.
+
+### Limitations
+- Release playbooks must be installed on EC2 separately when their contents change.
+- Rollback restores application code, not database changes.
+- This is a single-server deployment with possible downtime during container replacement.
+- Health verification currently checks the application endpoint, not database readiness.
+- The deployment workflow accepts an existing image digest; it does not independently enforce CI provenance.
+- SSH access remains configured for administration and bootstrap.

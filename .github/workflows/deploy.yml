@@ -1,0 +1,139 @@
+name: Deploy CloudOps Desk
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: "ECR image digest, including sha256:"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudops-desk-dev-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_PAGER: ""
+      INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      RELEASE_DOCUMENT: ${{ vars.SSM_RELEASE_DOCUMENT }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      IMAGE_DIGEST: ${{ inputs.image_digest }}
+
+    steps:
+      - name: Validate release input
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Supply a complete sha256 image digest."
+            exit 1
+          fi
+
+          test -n "$INSTANCE_ID"
+          test -n "$RELEASE_DOCUMENT"
+          test -n "$ECR_REPOSITORY"
+          test -n "$AWS_REGION"
+
+      - name: Authenticate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: "595540521786"
+          role-session-name: deploy-${{ github.run_id }}
+          role-duration-seconds: 1800
+
+      - name: Verify image exists in ECR
+        run: |
+          aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageDigest=$IMAGE_DIGEST"
+
+      - name: Submit release to Systems Manager
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IMAGE_URI="595540521786.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY@$IMAGE_DIGEST"
+          PARAMETERS=$(jq -n --arg image "$IMAGE_URI" \
+            '{ImageUri: [$image]}')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "$RELEASE_DOCUMENT" \
+            --parameters "$PARAMETERS" \
+            --timeout-seconds 120 \
+            --comment "CloudOps Desk GitHub release $GITHUB_RUN_ID" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### CloudOps Desk release"
+            echo "- Image: \`$IMAGE_URI\`"
+            echo "- Instance: \`$INSTANCE_ID\`"
+            echo "- SSM command: \`$COMMAND_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Wait for deployment and report result
+        shell: bash
+        env:
+          COMMAND_ID: ${{ steps.release.outputs.command_id }}
+        run: |
+          set -euo pipefail
+
+          RESULT="$RUNNER_TEMP/cloudops-result.json"
+          ERROR="$RUNNER_TEMP/cloudops-result-error.txt"
+
+          for attempt in $(seq 1 210); do
+            if aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --output json > "$RESULT" 2> "$ERROR"; then
+
+              STATUS=$(jq -r '.Status' "$RESULT")
+
+              case "$STATUS" in
+                Pending|InProgress|Delayed|Cancelling)
+                  ;;
+                Success)
+                  jq -r '.StandardOutputContent, .StandardErrorContent' "$RESULT"
+                  echo "- Result: **Success**" >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+                  ;;
+                *)
+                  jq -r '.StandardOutputContent, .StandardErrorContent' "$RESULT"
+                  echo "- Result: **$STATUS**" >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
+                  ;;
+              esac
+            else
+              if ! grep -q 'InvocationDoesNotExist' "$ERROR"; then
+                cat "$ERROR" >&2
+                exit 1
+              fi
+            fi
+
+            sleep 5
+          done
+
+          echo "Stopped waiting. Inspect SSM command $COMMAND_ID before retrying."
+          echo "- Result: **Polling timeout; inspect SSM**" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
