@@ -1,10 +1,15 @@
 ---
-- name: Manage CloudOps Desk application
+- name: Deploy CloudOps Desk with rollback
   hosts: cloudops
   become: true
 
-
   tasks:
+    - name: Require a deployment image
+      ansible.builtin.assert:
+        that:
+          - cloudops_image is defined
+        fail_msg: "Supply cloudops_image when running the release."
+
     - name: Install Python dependency for Docker modules
       ansible.builtin.apt:
         name: python3-requests
@@ -13,42 +18,88 @@
         cache_valid_time: 3600
         lock_timeout: 300
 
-    - name: Check deployment image exists
+    - name: Check selected image exists locally
       community.docker.docker_image_info:
         name: "{{ cloudops_image }}"
       register: image_info
 
-    - name: Require the image to be loaded
+    - name: Require the selected image
       ansible.builtin.assert:
         that:
           - image_info.images | length > 0
-        fail_msg: "Load the deployment image on EC2 before continuing."
+        fail_msg: "Pull the selected image before deploying."
 
-    - name: Ensure database volume exists
-      community.docker.docker_volume:
-        name: cloudops-ticket-data
-        state: present
-
-    - name: Ensure application container is running
-      community.docker.docker_container:
+    - name: Record the current container
+      community.docker.docker_container_info:
         name: cloudops-desk
-        image: "{{ cloudops_image }}"
-        pull: never
-        state: started
-        restart_policy: unless-stopped
-        published_ports:
-          - "0.0.0.0:5000:5000"
-        volumes:
-          - "cloudops-ticket-data:/app/instance"
+      register: previous
 
-    - name: Wait for application health endpoint
-      ansible.builtin.uri:
-        url: http://127.0.0.1:5000/health
-        status_code: 200
-        return_content: true
-      register: health
-      until: >
-        health.status | default(0) == 200 and
-        (health.json | default({})).get('status') == 'ok'
-      retries: 30
-      delay: 2
+    - name: Require an existing deployment for rollback
+      ansible.builtin.assert:
+        that:
+          - previous.exists
+        fail_msg: "This release playbook requires an existing deployment."
+
+    - name: Remember the previous local image ID
+      ansible.builtin.set_fact:
+        previous_image: "{{ previous.container.Image }}"
+
+    - name: Deploy and verify selected image
+      block:
+        - name: Start selected application image
+          community.docker.docker_container:
+            name: cloudops-desk
+            image: "{{ cloudops_image }}"
+            pull: never
+            state: started
+            restart_policy: unless-stopped
+            published_ports:
+              - "0.0.0.0:5000:5000"
+            volumes:
+              - "cloudops-ticket-data:/app/instance"
+
+        - name: Simulate failed release verification for rollback drill
+          ansible.builtin.fail:
+            msg: "Intentional failure to test rollback."
+          when: rollback_drill | default(false) | bool
+
+        - name: Verify application health
+          ansible.builtin.uri:
+            url: http://127.0.0.1:5000/health
+            status_code: 200
+            return_content: true
+          register: health
+          until: >
+            health.status | default(0) == 200 and
+            (health.json | default({})).get('status') == 'ok'
+          retries: 30
+          delay: 2
+
+      rescue:
+        - name: Restore previous application image
+          community.docker.docker_container:
+            name: cloudops-desk
+            image: "{{ previous_image }}"
+            pull: never
+            state: started
+            restart_policy: unless-stopped
+            published_ports:
+              - "0.0.0.0:5000:5000"
+            volumes:
+              - "cloudops-ticket-data:/app/instance"
+
+        - name: Verify restored application health
+          ansible.builtin.uri:
+            url: http://127.0.0.1:5000/health
+            status_code: 200
+            return_content: true
+          register: restored_health
+          until: >
+            restored_health.status | default(0) == 200 and
+            (restored_health.json | default({})).get('status') == 'ok'
+          retries: 30
+          delay: 2
+
+        - name: Report failed release after recovery
+          ansible.builtin.fail:
+            msg: "Release failed. Previous image was restored and passed its health check."

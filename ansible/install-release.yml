@@ -1,0 +1,45 @@
+---
+- name: Install CloudOps Desk release automation
+  hosts: cloudops
+  become: true
+
+  tasks:
+    - name: Create release inventory directory
+      ansible.builtin.file:
+        path: /opt/cloudops-desk/automation/inventory
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy application release playbooks
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/{{ item }}"
+        dest: "/opt/cloudops-desk/automation/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - prepare-ecr.yml
+        - init-database.yml
+        - deploy.yml
+
+    - name: Copy local execution inventory
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/inventory/local.ini"
+        dest: /opt/cloudops-desk/automation/inventory/local.ini
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Create application-only release entry point
+      ansible.builtin.copy:
+        dest: /opt/cloudops-desk/automation/release.yml
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          ---
+          - ansible.builtin.import_playbook: prepare-ecr.yml
+          - ansible.builtin.import_playbook: init-database.yml
+          - ansible.builtin.import_playbook: deploy.yml

@@ -32,3 +32,71 @@
       - aws-cli
       - --classic
     creates: /snap/bin/aws
+
+- name: Install Python virtual environment support
+  ansible.builtin.apt:
+    name: python3-venv
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+
+- name: Install isolated Ansible controller on EC2
+  ansible.builtin.pip:
+    name: ansible-core==2.20.1
+    virtualenv: /opt/cloudops-ansible
+    virtualenv_command: /usr/bin/python3 -m venv
+
+- name: Ensure deployment configuration directory exists
+  ansible.builtin.file:
+    path: /opt/cloudops-desk/automation
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copy pinned Ansible collection requirements
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/requirements.yml"
+    dest: /opt/cloudops-desk/automation/requirements.yml
+    owner: root
+    group: root
+    mode: "0644"
+  register: collection_requirements
+
+- name: Ensure Ansible collections directory exists
+  ansible.builtin.file:
+    path: /opt/cloudops-ansible/collections
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check installed Docker collection version
+  ansible.builtin.command:
+    argv:
+      - /opt/cloudops-ansible/bin/ansible-galaxy
+      - collection
+      - list
+      - community.docker
+      - --format
+      - json
+  environment:
+    ANSIBLE_COLLECTIONS_PATH: /opt/cloudops-ansible/collections
+  register: installed_collections
+  changed_when: false
+
+- name: Install required Docker collection
+  ansible.builtin.command:
+    argv:
+      - /opt/cloudops-ansible/bin/ansible-galaxy
+      - collection
+      - install
+      - -r
+      - /opt/cloudops-desk/automation/requirements.yml
+      - -p
+      - /opt/cloudops-ansible/collections
+  when: >
+    collection_requirements.changed or
+    '"community.docker"' not in installed_collections.stdout
+  changed_when: true

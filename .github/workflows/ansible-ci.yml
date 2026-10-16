@@ -29,9 +29,14 @@ jobs:
       - name: Install required collections
         run: ansible-galaxy collection install -r ansible/requirements.yml
 
-      - name: Check deployment playbook syntax
+      - name: Check Ansible playbook syntax
         run: |
           ansible-playbook \
             -i ansible/inventory/ci.ini \
             ansible/release.yml \
+            --syntax-check
+
+          ansible-playbook \
+            -i ansible/inventory/ci.ini \
+            ansible/install-release.yml \
             --syntax-check
