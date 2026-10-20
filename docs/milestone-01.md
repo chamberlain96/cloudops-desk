@@ -456,3 +456,21 @@ Publish tested Docker images from GitHub Actions to Amazon ECR and deploy them t
 
 ### Interview explanation
 “I prepared a Flask application for PostgreSQL and provisioned private, encrypted RDS infrastructure with Terraform. I verified certificate-checked TLS connectivity through SSM using Secrets Manager and temporary IAM access, then removed the administrator-secret permission.”
+
+## Restricted RDS application credentials
+
+Created a dedicated PostgreSQL login, cloudops_app, with no superuser,
+database creation, role creation, replication, or row-security bypass privileges.
+
+Stored its generated password in AWS Secrets Manager. The bootstrap script
+reuses saved credentials when rerun and does not print passwords.
+
+Verified application login using TLS with certificate and hostname validation.
+
+Removed temporary bootstrap permissions after setup. Confirmed that the
+EC2 instance role can read the application secret but cannot read the RDS
+administrator secret.
+
+Current boundary: database and schema connection permissions are configured.
+Table permissions, ticket migration, and application cutover remain pending.
+The deployed application continues to use SQLite.
