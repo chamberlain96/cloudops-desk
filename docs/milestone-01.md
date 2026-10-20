@@ -474,3 +474,29 @@ administrator secret.
 Current boundary: database and schema connection permissions are configured.
 Table permissions, ticket migration, and application cutover remain pending.
 The deployed application continues to use SQLite.
+
+## RDS schema and secure configuration preparation
+
+Prepared the PostgreSQL ticket table to match the application model.
+Granted cloudops_app SELECT and INSERT on the table and USAGE on its
+ID sequence. Verified that it cannot create tables in the public schema.
+
+Checked the EC2 SQLite database: integrity passed, with 2 tickets and
+highest ticket ID 2. Created and integrity-checked an online SQLite
+backup on the EC2 disk. This backup does not protect against disk loss.
+
+Added DATABASE_URL_FILE support. A missing or empty configured file
+stops application startup. All 11 application tests passed.
+
+Added an Ansible playbook that retrieves application credentials from
+Secrets Manager and writes a protected connection file owned by UID
+10001. Credential tasks use no_log and disable file diffs.
+
+Verified that the updated Docker image, running as UID 10001, reads
+a read-only mounted database configuration file.
+
+Removed temporary administrator-secret access after schema setup.
+
+Pending: final backup with writes paused, ticket migration, ID sequence
+verification, RDS application cutover, and database-aware rollback.
+The deployed application continues to use SQLite.

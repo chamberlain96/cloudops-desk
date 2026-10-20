@@ -1,3 +1,4 @@
+from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 import os
@@ -10,9 +11,18 @@ from .models import db, Ticket
 
 def create_app(test_config=None):
     app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-        "DATABASE_URL", "sqlite:///tickets.db"
-    )
+    database_url_file = os.environ.get("DATABASE_URL_FILE")
+
+    if database_url_file:
+        database_url = Path(database_url_file).read_text().strip()
+        if not database_url:
+            raise RuntimeError("Database URL file is empty")
+    else:
+        database_url = os.environ.get(
+            "DATABASE_URL", "sqlite:///tickets.db"
+        )
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     if test_config is not None:
