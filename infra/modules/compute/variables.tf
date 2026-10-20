@@ -35,3 +35,8 @@ variable "instance_type" {
   description = "EC2 instance type."
   type        = string
 }
+
+variable "ami_id" {
+  description = "Pinned AMI for the application server"
+  type        = string
+}

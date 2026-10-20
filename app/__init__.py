@@ -1,3 +1,5 @@
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 import os
 
 import click
@@ -8,11 +10,22 @@ from .models import db, Ticket
 
 def create_app(test_config=None):
     app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///tickets.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL", "sqlite:///tickets.db"
+    )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     if test_config is not None:
         app.config.update(test_config)
+
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+    }
+
+    if app.config["SQLALCHEMY_DATABASE_URI"].startswith("postgresql"):
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"]["connect_args"] = {
+            "connect_timeout": 5,
+        }
 
     os.makedirs(app.instance_path, exist_ok=True)
     db.init_app(app)
@@ -28,6 +41,16 @@ def create_app(test_config=None):
     @app.get("/health")
     def health():
         return jsonify(status="ok"), 200
+
+    @app.get("/ready")
+    def ready():
+        try:
+            db.session.execute(text("SELECT 1")).scalar_one()
+        except SQLAlchemyError:
+            db.session.rollback()
+            return jsonify(status="not_ready"), 503
+
+        return jsonify(status="ready"), 200
 
     @app.post("/tickets")
     def create_ticket():
