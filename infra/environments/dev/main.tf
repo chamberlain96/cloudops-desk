@@ -28,6 +28,7 @@ module "network" {
 }
 
 module "compute" {
+  ami_id = "ami-0fa5967347d08d2df"
   source = "../../modules/compute"
 
   name           = "cloudops-desk-dev"

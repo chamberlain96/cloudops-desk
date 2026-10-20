@@ -414,3 +414,45 @@ Publish tested Docker images from GitHub Actions to Amazon ECR and deploy them t
 - Health verification currently checks the application endpoint, not database readiness.
 - The deployment workflow accepts an existing image digest; it does not independently enforce CI provenance.
 - SSH access remains configured for administration and bootstrap.
+
+## Milestone 6 — PostgreSQL support and private RDS foundation
+
+### Application preparation
+- Made the database connection configurable through DATABASE_URL, retaining SQLite as the default.
+- Added the Psycopg PostgreSQL driver.
+- Verified ticket creation through Flask and confirmed the record directly in local PostgreSQL.
+- Added /ready to check database connectivity, separate from /health.
+- Added automated readiness tests.
+- Enabled connection-pool pre-ping and a PostgreSQL connection timeout.
+- Corrected configuration ordering so SQLite tests do not receive PostgreSQL-only connection arguments.
+
+### AWS infrastructure
+- Created private RDS PostgreSQL 17.11 using Terraform.
+- Used db.t4g.micro, Single-AZ, and 20 GiB encrypted gp3 storage.
+- Restricted port 5432 to the application's security group.
+- Required TLS through a database parameter group.
+- Enabled RDS-managed administrator credentials in Secrets Manager.
+- Enabled deletion protection and required a final snapshot on deletion.
+- Configured one-day automated backup retention because the account rejected seven days.
+
+### Verification
+- RDS reported available, publicly accessible false, storage encrypted true, and managed secret active.
+- A Python script executed through SSM retrieved credentials using the EC2 instance role.
+- The script connected with sslmode=verify-full, executed SELECT 1, and confirmed TLS.
+- Removed the temporary EC2 administrator-secret access policy after the check.
+
+### Troubleshooting
+- A newer Ubuntu AMI selected by most_recent caused Terraform to propose EC2 replacement. Pinned the existing AMI to preserve the server and its SQLite data.
+- AWS rejected seven-day backup retention under the account plan. Retried successfully with one day.
+- An empty shell command-ID variable prevented an SSM waiter from running. Submitted the command directly and tracked its returned ID.
+
+### Current boundaries
+- The deployed application still uses SQLite.
+- Existing tickets have not been migrated.
+- Restricted application database credentials and RDS application deployment are pending.
+- One-day backup retention and Single-AZ availability are lab limitations.
+- Backup configuration is verified; a restore drill has not yet been completed.
+- Database-check dependencies on EC2 were installed through SSM and are not yet fully managed by Ansible.
+
+### Interview explanation
+“I prepared a Flask application for PostgreSQL and provisioned private, encrypted RDS infrastructure with Terraform. I verified certificate-checked TLS connectivity through SSM using Secrets Manager and temporary IAM access, then removed the administrator-secret permission.”
