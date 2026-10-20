@@ -1,0 +1,65 @@
+---
+- name: Prepare secure RDS application configuration
+  hosts: cloudops
+  become: true
+
+  tasks:
+    - name: Create protected database configuration directory
+      ansible.builtin.file:
+        path: /opt/cloudops-desk/secrets
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Retrieve and format application database credentials
+      ansible.builtin.command:
+        argv:
+          - /opt/cloudops-db-tools/bin/python
+          - -c
+          - |
+            import json
+            from urllib.parse import quote, urlencode
+            import boto3
+
+            client = boto3.client(
+                "secretsmanager", region_name="us-east-1"
+            )
+            response = client.get_secret_value(
+                SecretId="arn:aws:secretsmanager:us-east-1:595540521786:secret:cloudops-desk/dev/database-app-JCXV0M"
+            )
+            secret = json.loads(response["SecretString"])
+
+            if (
+                secret.get("username") != "cloudops_app"
+                or not secret.get("password")
+                or secret.get("host") !=
+                    "cloudops-desk-dev-db.ckroys2kc4df.us-east-1.rds.amazonaws.com"
+                or secret.get("port") != 5432
+                or secret.get("dbname") != "cloudops"
+            ):
+                raise SystemExit("Unexpected database secret configuration")
+
+            username = quote(secret["username"], safe="")
+            password = quote(secret["password"], safe="")
+            query = urlencode({
+                "sslmode": "verify-full",
+                "sslrootcert": "/run/secrets/rds-ca.pem",
+            })
+            print(
+                f"postgresql+psycopg://{username}:{password}"
+                f"@{secret['host']}:5432/cloudops?{query}"
+            )
+      register: database_url_result
+      changed_when: false
+      no_log: true
+
+    - name: Write database URL for the application container user
+      ansible.builtin.copy:
+        content: "{{ database_url_result.stdout }}\n"
+        dest: /opt/cloudops-desk/secrets/database-url
+        owner: "10001"
+        group: "10001"
+        mode: "0400"
+      no_log: true
+      diff: false
