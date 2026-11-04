@@ -1,0 +1,133 @@
+---
+- name: Rehearse CloudOps Desk RDS deployment with rollback
+  hosts: cloudops
+  become: true
+
+  vars:
+    rds_container_name: cloudops-desk-rds-rehearsal
+    rds_database_file: /opt/cloudops-desk/secrets/database-url
+    rds_certificate_file: /opt/cloudops-desk/certs/us-east-1-bundle.pem
+
+  tasks:
+    - name: Require a deployment image
+      ansible.builtin.assert:
+        that:
+          - cloudops_image is defined
+        fail_msg: "Supply the selected ECR image URI."
+
+    - name: Check required configuration files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ rds_database_file }}"
+        - "{{ rds_certificate_file }}"
+      register: configuration_files
+
+    - name: Require database configuration and certificate
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isreg
+        fail_msg: "Required RDS configuration file is missing."
+      loop: "{{ configuration_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Record the previous rehearsal container
+      community.docker.docker_container_info:
+        name: "{{ rds_container_name }}"
+      register: previous_rds
+      no_log: true
+
+    - name: Require an existing RDS release for the rollback drill
+      ansible.builtin.assert:
+        that:
+          - previous_rds.exists
+        fail_msg: "Deploy a healthy rehearsal container before testing rollback."
+      when: rollback_drill | default(false) | bool
+
+    - name: Deploy and verify selected image
+      block:
+        - name: Start RDS rehearsal container
+          community.docker.docker_container:
+            name: "{{ rds_container_name }}"
+            image: "{{ cloudops_image }}"
+            pull: never
+            state: started
+            restart_policy: unless-stopped
+            published_ports:
+              - "127.0.0.1:5001:5000"
+            env:
+              DATABASE_URL_FILE: /run/secrets/database-url
+            volumes:
+              - "{{ rds_database_file }}:/run/secrets/database-url:ro"
+              - "{{ rds_certificate_file }}:/run/secrets/rds-ca.pem:ro"
+
+        - name: Verify database readiness
+          ansible.builtin.uri:
+            url: http://127.0.0.1:5001/ready
+            status_code: 200
+            return_content: true
+          register: readiness
+          until: >
+            readiness.status | default(0) == 200 and
+            (readiness.json | default({})).get('status') == 'ready'
+          retries: 30
+          delay: 2
+
+        - name: Verify ticket table access
+          ansible.builtin.uri:
+            url: http://127.0.0.1:5001/tickets
+            status_code: 200
+          no_log: true
+
+        - name: Simulate failed release verification
+          ansible.builtin.fail:
+            msg: "Intentional failure for the RDS rollback drill."
+          when: rollback_drill | default(false) | bool
+
+      rescue:
+        - name: Restore previous rehearsal image with RDS configuration
+          community.docker.docker_container:
+            name: "{{ rds_container_name }}"
+            image: "{{ previous_rds.container.Image }}"
+            pull: never
+            state: started
+            restart_policy: unless-stopped
+            published_ports:
+              - "127.0.0.1:5001:5000"
+            env:
+              DATABASE_URL_FILE: /run/secrets/database-url
+            volumes:
+              - "{{ rds_database_file }}:/run/secrets/database-url:ro"
+              - "{{ rds_certificate_file }}:/run/secrets/rds-ca.pem:ro"
+          when: previous_rds.exists
+
+        - name: Verify restored RDS release
+          ansible.builtin.uri:
+            url: http://127.0.0.1:5001/ready
+            status_code: 200
+            return_content: true
+          register: restored
+          until: >
+            restored.status | default(0) == 200 and
+            (restored.json | default({})).get('status') == 'ready'
+          retries: 30
+          delay: 2
+          when: previous_rds.exists
+
+        - name: Remove failed first deployment when no baseline exists
+          community.docker.docker_container:
+            name: "{{ rds_container_name }}"
+            state: absent
+          when: not previous_rds.exists
+
+        - name: Report unsuccessful release
+          ansible.builtin.fail:
+            msg: >-
+              RDS rehearsal release failed.
+              {% if previous_rds.exists %}
+              The previous image was restored and passed readiness.
+              {% else %}
+              No previous release existed; the failed container was removed.
+              {% endif %}
