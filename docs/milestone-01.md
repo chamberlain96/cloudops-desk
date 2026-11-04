@@ -500,3 +500,31 @@ Removed temporary administrator-secret access after schema setup.
 Pending: final backup with writes paused, ticket migration, ID sequence
 verification, RDS application cutover, and database-aware rollback.
 The deployed application continues to use SQLite.
+
+## RDS deployment rehearsal and recovery
+
+Added a separate RDS release entry point and deployment playbook.
+The rehearsal container listens on EC2 loopback port 5001.
+The original SQLite application remains on port 5000.
+
+The RDS container uses the restricted application credentials through
+a read-only mounted database URL file and RDS CA certificate.
+Deployment checks database readiness and ticket-table access.
+
+Verified a successful rehearsal deployment using image:
+sha256:77778da2f3eb087a73e61de1dc9ddf467cbbb02a951ecc279e2c17346e6f82a5
+
+Ran an intentional verification failure. Ansible entered its rescue
+block, restored the rehearsal image with RDS configuration, and
+verified readiness. The release correctly remained marked failed.
+
+This drill used the same image. Rollback between different image
+versions has not yet been demonstrated.
+
+Independent checks afterward confirmed:
+- Original SQLite application: /health returned status ok.
+- RDS rehearsal: /ready returned status ready.
+
+Added RDS release syntax validation to the Ansible CI workflow.
+
+SQLite ticket migration and application cutover remain pending.

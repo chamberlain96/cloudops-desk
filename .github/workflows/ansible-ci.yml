@@ -40,3 +40,8 @@ jobs:
             -i ansible/inventory/ci.ini \
             ansible/install-release.yml \
             --syntax-check
+
+          ansible-playbook \
+            -i ansible/inventory/ci.ini \
+            ansible/release-rds.yml \
+            --syntax-check
