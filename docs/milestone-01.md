@@ -556,3 +556,36 @@ checks, not these local integration tests.
 
 The migration script has not yet been applied to RDS.
 The deployed application continues to use SQLite.
+
+## SQLite-to-RDS application cutover
+
+Paused both application containers and created the final SQLite backup:
+ /opt/cloudops-desk/backups/tickets-final-20261104T015800463279Z.db
+
+Backup integrity passed: 2 tickets, highest ID 2.
+
+Migrated both tickets to RDS using the tested migration script.
+Verified original IDs and all field values, and prepared the ID sequence.
+
+Preserved the original SQLite container as cloudops-desk-sqlite-backup,
+stopped with automatic restart disabled. Its volume remains intact.
+
+Deployed cloudops-desk on port 5000 using restricted RDS credentials
+from a protected file and TLS certificate verification.
+Confirmed tickets 1 and 2 were accessible. Created a new ticket with
+an ID above 2 and verified it survived a container restart.
+
+Updated the standard release playbook and installer to use RDS.
+Updated the installed EC2 release entry point used by the existing
+GitHub Actions and SSM deployment path.
+
+Removed temporary migration access. Confirmed:
+- EC2 can read the application secret.
+- EC2 cannot read the administrator secret.
+- Application readiness still passes.
+
+A fresh GitHub deployment using the updated entry point remains to
+be verified. Recovery between different image versions is also pending.
+
+After new RDS writes, restarting the old SQLite application would
+serve stale data. Image rollback must retain the RDS configuration.

@@ -5,8 +5,8 @@
 - name: Prepare application image from ECR
   ansible.builtin.import_playbook: prepare-ecr.yml
 
-- name: Prepare application database
-  ansible.builtin.import_playbook: init-database.yml
+- name: Prepare secure RDS configuration
+  ansible.builtin.import_playbook: prepare-rds-config.yml
 
-- name: Start and verify application
-  ansible.builtin.import_playbook: deploy.yml
+- name: Deploy main application using RDS
+  ansible.builtin.import_playbook: deploy-rds-production.yml

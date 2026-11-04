@@ -21,8 +21,8 @@
         mode: "0644"
       loop:
         - prepare-ecr.yml
-        - init-database.yml
-        - deploy.yml
+        - prepare-rds-config.yml
+        - deploy-rds-production.yml
 
     - name: Copy local execution inventory
       ansible.builtin.copy:
@@ -41,5 +41,5 @@
         content: |
           ---
           - ansible.builtin.import_playbook: prepare-ecr.yml
-          - ansible.builtin.import_playbook: init-database.yml
-          - ansible.builtin.import_playbook: deploy.yml
+          - ansible.builtin.import_playbook: prepare-rds-config.yml
+          - ansible.builtin.import_playbook: deploy-rds-production.yml
