@@ -528,3 +528,31 @@ Independent checks afterward confirmed:
 Added RDS release syntax validation to the Ansible CI workflow.
 
 SQLite ticket migration and application cutover remain pending.
+
+## SQLite-to-RDS migration tooling
+
+Added a migration script that defaults to preflight-only mode.
+Database changes require the explicit --apply flag.
+
+The script reads SQLite without modifying it, preserves ticket IDs
+and all fields, and rejects extra or conflicting target records.
+Applying copies missing records in one transaction, verifies the
+result, and prepares the PostgreSQL ID sequence without moving it
+backward.
+
+Validation completed:
+- 6 SQLite source-reading and validation tests passed.
+- 4 integration tests against disposable local PostgreSQL passed.
+- Full suite: 21 tests passed.
+
+Integration tests verified preflight makes no inserts, copying
+preserves fields, reruns create no duplicates, the next ticket ID
+is correct, and conflicting or extra records are rejected.
+
+CI now starts a disposable PostgreSQL service and enables the
+integration tests before building or publishing the application image.
+AWS authentication and TLS transport are covered by separate RDS
+checks, not these local integration tests.
+
+The migration script has not yet been applied to RDS.
+The deployed application continues to use SQLite.
