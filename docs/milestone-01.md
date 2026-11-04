@@ -589,3 +589,15 @@ be verified. Recovery between different image versions is also pending.
 
 After new RDS writes, restarting the old SQLite application would
 serve stale data. Image rollback must retain the RDS configuration.
+
+### Post-cutover GitHub deployment verification
+
+Successfully deployed through the regular release path:
+GitHub Actions → OIDC → SSM → Ansible → Docker → RDS.
+
+Post-deployment SSM verification:
+ff14e521-51b0-4491-968b-0f5375cdd1cc
+
+Confirmed application readiness and access to migrated tickets 1 and 2.
+The SQLite backup remains stopped and must not serve new traffic.
+Recovery between different image versions remains a future drill.
